@@ -33,7 +33,10 @@ needed to serve the application. Camera access needs HTTPS (or localhost).
   by label as well as ID, because browsers may issue new camera IDs per visit.
 - Open the page with `?debug` to show decoder speed, camera resolution and
   settings, and the last raw reads (`✓` accepted, `·` not yet). Add `&zoom=1`
-  to turn the mild zoom off or `&native=0` to scan with ZXing only.
+  to turn the mild zoom off, `&native=0` to scan with ZXing only, or
+  `&box=30` to `&box=90` to try another guide-box width (percent of the picture).
+- The guide box is 45% of the picture's width, so a standard 37 mm product
+  barcode fills it at about 13-15 cm, within most phones' focus range.
 - Device-local barcode/photo storage.
 - PDF sharing: two-column table, barcode left and uncropped photograph right.
 - Three-note scan confirmation melody.

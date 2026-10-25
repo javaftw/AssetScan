@@ -49,6 +49,10 @@
   // Testing switches: ?zoom=1 turns the mild zoom off, ?native=0 leaves only ZXing scanning.
   const zoomSetting = Number(params.get('zoom')) || 1.5;
   const nativeAllowed = params.get('native') !== '0';
+  // The guide box is 45% of the picture's width: a standard 37 mm product barcode then fills it at
+  // about 13-15 cm, within most phones' focus range. ?box=30 to ?box=90 overrides it for testing.
+  const boxSetting = Number(params.get('box'));
+  if (boxSetting >= 30 && boxSetting <= 90) ui.viewfinder.style.setProperty('--guide-width', `${boxSetting}%`);
   let pdfFile = null;
   let sharing = false;
   let prepareTimer = null;
@@ -550,14 +554,16 @@
     return point && point.x >= 0 && point.x <= 1 && point.y >= 0 && point.y <= 1 ? point : null;
   }
 
-  // The on-screen guide box in frame coordinates, so the decoder reads exactly what it outlines.
+  // The band of the frame the quick reads use: the guide box's rows, widened by half its height
+  // above and below, across the full frame width so labels longer than the box are not cut off.
   function guideRegion() {
     const box = ui.viewfinder.getBoundingClientRect();
     const a = toFrame(box.left, box.top), b = toFrame(box.right, box.bottom);
     if (!a || !b) return null;
     const unit = (value) => Math.min(1, Math.max(0, value));
-    const x = unit(a.x), y = unit(a.y), width = unit(b.x) - x, height = unit(b.y) - y;
-    return width > .05 && height > .05 ? { x, y, width, height } : null;
+    const margin = (b.y - a.y) / 2;
+    const y = unit(a.y - margin), height = unit(b.y + margin) - y;
+    return height > .05 ? { x: 0, y, width: 1, height } : null;
   }
 
   // Open the page with ?debug to show decoder speed and camera settings while scanning.
