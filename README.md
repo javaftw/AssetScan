@@ -27,6 +27,9 @@ needed to serve the application. Camera access needs HTTPS (or localhost).
 - Duplicate skipping, undo and clear.
 - Tap-to-focus, mild zoom and continuous or single-shot autofocus where the
   browser allows camera control.
+- Rear-lens picker on the live camera picture when the browser lists more than
+  one rear camera (front cameras are never offered). The choice is remembered,
+  by label as well as ID, because browsers may issue new camera IDs per visit.
 - Open the page with `?debug` to show decoder speed and camera settings.
 - Device-local barcode/photo storage.
 - PDF sharing: two-column table, barcode left and uncropped photograph right.

@@ -176,5 +176,18 @@
     } catch (_) { return null; }
   }
   const torch = (track, on) => apply(track, { torch: on });
-  window.PocketScanner = { createScanner, frameGrabber, nativeDetector, focus, focusAt, zoom, torch, weakFormats };
+
+  const frontLens = /front|user|facetime|selfie/i;
+  // Rear cameras with readable names: iPhone "Back Ultra Wide Camera" becomes "Ultra Wide" and
+  // "Back Camera" becomes "Wide". Android labels such as "camera2 2, facing back" carry no lens
+  // type, so those are numbered. Labels are empty until camera permission is granted.
+  function rearLenses(devices) {
+    return devices.filter(d => d.kind === 'videoinput' && d.deviceId && !frontLens.test(d.label)).map((d, i) => {
+      if (/^back camera$/i.test(d.label.trim())) return { id: d.deviceId, label: d.label, name: 'Wide' };
+      const name = d.label.replace(/camera2 \d+/gi, '').replace(/\b(back|rear|camera|facing|environment)\b/gi, '')
+        .replace(/[(),]/g, ' ').replace(/\s+/g, ' ').trim();
+      return { id: d.deviceId, label: d.label, name: name || `Lens ${i + 1}` };
+    });
+  }
+  window.PocketScanner = { createScanner, frameGrabber, nativeDetector, focus, focusAt, zoom, torch, rearLenses, weakFormats };
 })();

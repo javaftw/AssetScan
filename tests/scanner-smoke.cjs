@@ -139,5 +139,12 @@ function scanOnce(Worker){
  await Promise.all([P.focus(camera),P.torch(camera,true)]);
  assert.deepEqual(JSON.parse(JSON.stringify(sent.advanced)),[{zoom:1.5,focusMode:'continuous',torch:true}],'Settings must accumulate, not replace each other');
  assert.equal(await P.zoom({getCapabilities(){return {zoom:{min:1,max:1}}}}),null);
- console.log('PASS: Code 128 decoding horizontal/vertical, normal/reduced contrast, guide-box region, EAN-13 read, QR ignored; decoding through the worker script and the on-page fallback, stale results dropped; zoom/torch/focus kept together, single-shot fallback, tap-to-focus, native decoder restricted to 1D.');
+ const cam=(label,id=label)=>({kind:'videoinput',deviceId:id,label});
+ const names=(list)=>P.rearLenses(list).map(l=>l.name);
+ // iPhone: front cameras dropped, lens types kept.
+ assert.deepEqual(names([cam('Front Camera'),cam('Back Camera'),cam('Back Ultra Wide Camera'),cam('Back Telephoto Camera'),cam('Back Dual Wide Camera')]),['Wide','Ultra Wide','Telephoto','Dual Wide']);
+ // Android: no lens types in labels, so rear cameras are numbered; microphones and blank IDs skipped.
+ assert.deepEqual(names([cam('camera2 1, facing front'),cam('camera2 0, facing back'),cam('camera2 2, facing back'),{kind:'audioinput',deviceId:'m',label:'mic'},cam('camera2 3, facing back','')]),['Lens 1','Lens 2']);
+ assert.deepEqual(P.rearLenses([cam('Integrated Camera','abc')]).map(l=>l.id),['abc']);
+ console.log('PASS: Code 128 decoding horizontal/vertical, normal/reduced contrast, guide-box region, EAN-13 read, QR ignored; decoding through the worker script and the on-page fallback, stale results dropped; zoom/torch/focus kept together, single-shot fallback, tap-to-focus, rear-lens naming, native decoder restricted to 1D.');
 })().catch(e=>{console.error(e);process.exitCode=1});

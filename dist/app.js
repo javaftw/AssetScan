@@ -8,7 +8,7 @@
   const ui = {
     headingCount: $('batch-heading-count'), list: $('batch-list'), empty: $('empty-batch'),
     video: $('camera-video'), viewport: $('camera-viewport'), focusRing: $('focus-ring'),
-    viewfinder: $('viewfinder'), debug: $('debug-readout'),
+    viewfinder: $('viewfinder'), debug: $('debug-readout'), lens: $('lens-select'),
     scanToggle: $('scan-toggle'), scanIcon: $('scan-button-icon'), scanLabel: $('scan-button-label'),
     status: $('scan-status'), torch: $('torch-toggle'), sound: $('sound-toggle'),
     duplicate: $('skip-duplicates'),
@@ -26,6 +26,9 @@
   let session = 0;
   let torchEnabled = false;
   let beepEnabled = true;
+  // The chosen rear lens. Browsers may issue new device IDs on each visit, so its label is kept to find it again.
+  let lensId = '';
+  let lensLabel = '';
   let audioContext = null;
   let lastDetection = { value: '', time: 0 };
   let lastDuplicateNotice = 0;
@@ -67,6 +70,8 @@
       const preferences = JSON.parse(localStorage.getItem(PREF_KEY) || '{}');
       if (typeof preferences.skipDuplicates === 'boolean') ui.duplicate.checked = preferences.skipDuplicates;
       if (typeof preferences.beep === 'boolean') beepEnabled = preferences.beep;
+      if (typeof preferences.lensId === 'string') lensId = preferences.lensId;
+      if (typeof preferences.lensLabel === 'string') lensLabel = preferences.lensLabel;
       removeOrphanPhotos();
     } catch (error) {
       setStatus('Browser storage is unavailable. Export before leaving this page.', 'warn');
@@ -87,7 +92,7 @@
 
   function savePreferences() {
     try {
-      localStorage.setItem(PREF_KEY, JSON.stringify({ skipDuplicates: ui.duplicate.checked, beep: beepEnabled }));
+      localStorage.setItem(PREF_KEY, JSON.stringify({ skipDuplicates: ui.duplicate.checked, beep: beepEnabled, lensId, lensLabel }));
     } catch (error) { /* Preferences can be session-only. */ }
   }
 
@@ -334,6 +339,7 @@
     ui.scanLabel.textContent = starting ? 'Opening camera…' : scanning ? 'Stop camera' : 'Start camera';
     ui.scanIcon.textContent = scanning ? '■' : '▷';
     ui.scanToggle.disabled = starting;
+    ui.lens.disabled = starting;
     ui.viewport.classList.toggle('live', live);
     if (!live) {
       ui.torch.disabled = true;
@@ -424,10 +430,7 @@
     updateCameraUi();
     setStatus('Opening rear camera at HD resolution…');
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: {
-        facingMode: { ideal: 'environment' },
-        width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 }
-      } });
+      const stream = await openCamera();
       if (session !== currentSession) {
         stream.getTracks().forEach((track) => track.stop());
         return;
@@ -458,6 +461,7 @@
         if (mode === 'single-shot' && currentSession === session) keepFocusing(track, currentSession);
       });
       updateTorchAvailability();
+      updateLenses();
       startNativeDecoder(currentSession);
       scanClock = Date.now();
       if (debug) startDebug(currentSession);
@@ -575,6 +579,7 @@
   }
 
   function tapToFocus(event) {
+    if (event.target === ui.lens) return;
     const track = ui.video.srcObject?.getVideoTracks?.()[0];
     if (!scanning || !track) return;
     const point = framePoint(event);
@@ -590,6 +595,52 @@
       }
       keepFocusing(track, currentSession);
     });
+  }
+
+  // Opens the chosen rear lens, or lets the browser pick the rear camera on "Auto".
+  async function openCamera() {
+    const video = { width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 } };
+    const open = (id) => navigator.mediaDevices.getUserMedia({ audio: false, video: id
+      ? { ...video, deviceId: { exact: id } }
+      : { ...video, facingMode: { ideal: 'environment' } } });
+    if (!lensId) return open();
+    try {
+      return await open(lensId);
+    } catch (error) {
+      if (!['OverconstrainedError', 'NotFoundError', 'NotReadableError'].includes(error?.name)) throw error;
+    }
+    // The saved ID is stale or busy. Open automatically (which also makes labels readable), then
+    // look the lens up by its label and switch to it if it is still there.
+    const stream = await open();
+    const devices = await navigator.mediaDevices.enumerateDevices().catch(() => []);
+    const match = PocketScanner.rearLenses(devices.filter((device) => device.kind === 'videoinput'))
+      .find((lens) => lensLabel && lens.label === lensLabel);
+    lensId = match ? match.id : '';
+    if (!match) lensLabel = '';
+    savePreferences();
+    if (!match || stream.getVideoTracks()[0]?.getSettings?.().deviceId === match.id) return stream;
+    stream.getTracks().forEach((track) => track.stop());
+    return open(match.id).catch(() => open());
+  }
+
+  // Shows the lens picker when the browser lists more than one rear camera. "Auto" names the lens
+  // the browser picked, so an accidental ultra-wide choice is visible.
+  async function updateLenses() {
+    if (!navigator.mediaDevices?.enumerateDevices) return;
+    let devices = [];
+    try { devices = await navigator.mediaDevices.enumerateDevices(); } catch (error) { return; }
+    const cameras = devices.filter((device) => device.kind === 'videoinput');
+    const lenses = cameras.some((device) => device.label) ? PocketScanner.rearLenses(cameras) : [];
+    const active = ui.video.srcObject?.getVideoTracks?.()[0]?.getSettings?.().deviceId;
+    const current = lenses.find((lens) => lens.id === active);
+    const auto = new Option(!lensId && current ? `Auto · ${current.name}` : 'Auto', '');
+    ui.lens.replaceChildren(auto, ...lenses.map((lens) => {
+      const option = new Option(lens.name, lens.id);
+      option.dataset.label = lens.label;
+      return option;
+    }));
+    ui.lens.value = lenses.some((lens) => lens.id === lensId) ? lensId : '';
+    ui.lens.hidden = lenses.length < 2;
   }
 
   function updateTorchAvailability() {
@@ -700,6 +751,13 @@
     });
     ui.torch.addEventListener('click', toggleTorch);
     ui.viewport.addEventListener('click', tapToFocus);
+    ui.lens.addEventListener('change', () => {
+      lensId = ui.lens.value;
+      lensLabel = ui.lens.selectedOptions[0]?.dataset.label || '';
+      savePreferences();
+      if (scanning) { stopCamera(); startCamera(); }
+    });
+    navigator.mediaDevices?.addEventListener?.('devicechange', updateLenses);
     ui.sound.addEventListener('click', () => {
       beepEnabled = !beepEnabled;
       if (beepEnabled) prepareBeep();
