@@ -1,4 +1,4 @@
-# PocketScan v12
+# PocketScan v13
 
 Phone barcode scanner that collects codes with photos and shares them as a PDF.
 
