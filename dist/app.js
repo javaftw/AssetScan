@@ -8,6 +8,7 @@
   const ui = {
     headingCount: $('batch-heading-count'), list: $('batch-list'), empty: $('empty-batch'),
     video: $('camera-video'), viewport: $('camera-viewport'), focusRing: $('focus-ring'),
+    viewfinder: $('viewfinder'), debug: $('debug-readout'),
     scanToggle: $('scan-toggle'), scanIcon: $('scan-button-icon'), scanLabel: $('scan-button-label'),
     status: $('scan-status'), torch: $('torch-toggle'), sound: $('sound-toggle'),
     duplicate: $('skip-duplicates'),
@@ -31,6 +32,13 @@
   let toastTimeout = null;
   let focusTimer = null;
   let focusRingTimer = null;
+  let pendingRead = { value: '', time: 0 };
+  let focusMode = null;
+  let zoomLevel = null;
+  let scanClock = 0;
+  let lastScanMs = null;
+  let debugTimer = null;
+  const debug = new URLSearchParams(location.search).has('debug');
   let pdfFile = null;
   let sharing = false;
   let prepareTimer = null;
@@ -283,7 +291,7 @@
     const persisted = save();
     render();
     signalSuccess();
-    setStatus(persisted ? `✓ Captured ${value} — ${codes.length} in batch` : `Captured ${value}. Export now; device storage failed.`, persisted ? 'good' : 'warn');
+    setStatus(persisted ? `✓ Captured ${value} (${format}) — ${codes.length} in batch` : `Captured ${value}. Export now; device storage failed.`, persisted ? 'good' : 'warn');
     return item;
   }
 
@@ -325,12 +333,34 @@
     }
   }
 
+  // Formats without a mandatory checksum need two matching reads (from either decoder) in quick succession.
+  function confirmedRead(value, format) {
+    if (!PocketScanner.weakFormats.includes(format)) return true;
+    const now = Date.now();
+    if (pendingRead.value === value && now - pendingRead.time < 1500) {
+      pendingRead = { value: '', time: 0 };
+      return true;
+    }
+    pendingRead = { value, time: now };
+    return false;
+  }
+
+  function cameraRead(raw, format) {
+    const value = String(raw == null ? '' : raw).trim();
+    if (!value || !confirmedRead(value, format)) return;
+    const item = addCode(value, format, true);
+    if (!item) return;
+    rememberPhoto(item, ui.video);
+    const now = Date.now();
+    lastScanMs = now - scanClock;
+    scanClock = now;
+  }
+
   function captureResult(result) {
     const value = typeof result.getText === 'function' ? result.getText() : result.text;
     const formatId = typeof result.getBarcodeFormat === 'function' ? result.getBarcodeFormat() : null;
     const formatName = formatId == null ? 'Barcode' : (ZXing.BarcodeFormat?.[formatId] ?? String(formatId));
-    const item = addCode(value, String(formatName).replaceAll('_', ' '), true);
-    if (item) rememberPhoto(item, ui.video);
+    cameraRead(value, String(formatName).replaceAll('_', ' '));
   }
 
   async function startNativeDecoder(currentSession) {
@@ -347,6 +377,8 @@
       nativeDetector = null;
       return;
     }
+    // The native detector leads; ZXing keeps running as a slower backup so it does not crowd it out.
+    if (scanner) scanner.timeBetweenDecodingAttempts = 200;
     const tick = async () => {
       if (currentSession !== session || !scanning || !nativeDetector) return;
       if (!nativeBusy && ui.video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
@@ -355,13 +387,13 @@
           const detected = await nativeDetector.detect(ui.video);
           if (currentSession === session) {
             for (const result of detected) {
-              const item = addCode(result.rawValue, (result.format || 'Barcode').replaceAll('_', ' ').toUpperCase(), true);
-              if (item) rememberPhoto(item, ui.video);
+              cameraRead(result.rawValue, (result.format || 'Barcode').replaceAll('_', ' ').toUpperCase());
             }
           }
         } catch (error) {
           // Some browsers expose BarcodeDetector but do not implement video detection.
           nativeDetector = null;
+          if (scanner) scanner.timeBetweenDecodingAttempts = 30;
         } finally {
           nativeBusy = false;
         }
@@ -388,7 +420,7 @@
     updateCameraUi();
     setStatus('Opening rear camera at HD resolution…');
     try {
-      const reader = PocketScanner.createReader(ZXing);
+      const reader = PocketScanner.createReader(ZXing, { region: guideRegion });
       scanner = reader;
       await reader.decodeFromConstraints({ audio: false, video: {
         facingMode: { ideal: 'environment' },
@@ -406,11 +438,17 @@
       updateCameraUi();
       setStatus('Scanning… Tap the picture to focus.');
       const track = ui.video.srcObject?.getVideoTracks?.()[0];
+      zoomLevel = null;
+      focusMode = null;
+      PocketScanner.zoom(track).then((level) => { zoomLevel = level; });
       PocketScanner.focus(track).then((mode) => {
+        focusMode = mode;
         if (mode === 'single-shot' && currentSession === session) keepFocusing(track, currentSession);
       });
       updateTorchAvailability();
       startNativeDecoder(currentSession);
+      scanClock = Date.now();
+      if (debug) startDebug(currentSession);
       setTimeout(() => {
         if (currentSession === session && scanning && !codes.length) {
           setStatus('Still no match? Try more light or move the camera slightly farther away.', 'warn');
@@ -440,6 +478,8 @@
     nativeTimer = null;
     clearTimeout(focusTimer);
     ui.focusRing.classList.remove('show');
+    clearInterval(debugTimer);
+    ui.debug.hidden = true;
     nativeDetector = null;
     try { scanner?.reset(); } catch (error) { /* Stream may already be stopped. */ }
     scanner = null;
@@ -462,16 +502,54 @@
     }, delay);
   }
 
-  // Maps a tap to the camera frame, which is letterboxed inside the video element (object-fit: contain).
-  function framePoint(event) {
+  // Maps a screen point to the camera frame (0 to 1 inside it), which is letterboxed inside the
+  // video element (object-fit: contain).
+  function toFrame(clientX, clientY) {
     const rect = ui.video.getBoundingClientRect();
     const vw = ui.video.videoWidth, vh = ui.video.videoHeight;
     if (!vw || !vh || !rect.width || !rect.height) return null;
     const scale = Math.min(rect.width / vw, rect.height / vh);
     const w = vw * scale, h = vh * scale;
-    const x = (event.clientX - rect.left - (rect.width - w) / 2) / w;
-    const y = (event.clientY - rect.top - (rect.height - h) / 2) / h;
-    return x >= 0 && x <= 1 && y >= 0 && y <= 1 ? { x, y } : null;
+    return { x: (clientX - rect.left - (rect.width - w) / 2) / w, y: (clientY - rect.top - (rect.height - h) / 2) / h };
+  }
+
+  function framePoint(event) {
+    const point = toFrame(event.clientX, event.clientY);
+    return point && point.x >= 0 && point.x <= 1 && point.y >= 0 && point.y <= 1 ? point : null;
+  }
+
+  // The on-screen guide box in frame coordinates, so the decoder reads exactly what it outlines.
+  function guideRegion() {
+    const box = ui.viewfinder.getBoundingClientRect();
+    const a = toFrame(box.left, box.top), b = toFrame(box.right, box.bottom);
+    if (!a || !b) return null;
+    const unit = (value) => Math.min(1, Math.max(0, value));
+    const x = unit(a.x), y = unit(a.y), width = unit(b.x) - x, height = unit(b.y) - y;
+    return width > .05 && height > .05 ? { x, y, width, height } : null;
+  }
+
+  // Open the page with ?debug to show decoder speed and camera settings while scanning.
+  function startDebug(currentSession) {
+    ui.debug.hidden = false;
+    let last = Date.now();
+    const update = () => {
+      if (currentSession !== session || !scanner?.stats) return;
+      const now = Date.now(), seconds = Math.max(.001, (now - last) / 1000), stats = scanner.stats;
+      const rate = stats.attempts / seconds;
+      const average = stats.attempts ? stats.busyMs / stats.attempts : 0;
+      ui.debug.textContent = [
+        `ZXing ${rate.toFixed(0)}/s · ${average.toFixed(0)} ms each`,
+        `native ${nativeDetector ? 'on' : 'off'}`,
+        `zoom ${zoomLevel ? `${zoomLevel}×` : 'n/a'}`,
+        `focus ${focusMode || 'n/a'}`,
+        `last scan ${lastScanMs == null ? '–' : `${(lastScanMs / 1000).toFixed(1)} s`}`
+      ].join(' · ');
+      stats.attempts = 0;
+      stats.busyMs = 0;
+      last = now;
+    };
+    update();
+    debugTimer = setInterval(update, 1000);
   }
 
   function showFocusRing(event) {
@@ -512,7 +590,7 @@
     const track = ui.video.srcObject?.getVideoTracks?.()[0];
     if (!track) return;
     try {
-      await track.applyConstraints({ advanced: [{ torch: !torchEnabled }] });
+      await PocketScanner.torch(track, !torchEnabled);
       torchEnabled = !torchEnabled;
       ui.torch.classList.toggle('is-on', torchEnabled);
       ui.torch.setAttribute('aria-pressed', String(torchEnabled));
