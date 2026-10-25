@@ -4,6 +4,10 @@ Phone barcode scanner that collects codes with photos and shares them as a PDF.
 
 Live: https://javaftw.github.io/PocketScan/
 
+Scan with your phone to open it:
+
+<img src="docs/qr-code.svg" alt="QR code for https://javaftw.github.io/PocketScan/" width="200">
+
 ## Application
 
 Buildless HTML, CSS and JavaScript in `dist/`. No installation or build is
