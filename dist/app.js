@@ -49,10 +49,16 @@
   // Testing switches: ?zoom=1 turns the mild zoom off, ?native=0 leaves only ZXing scanning.
   const zoomSetting = Number(params.get('zoom')) || 1.5;
   const nativeAllowed = params.get('native') !== '0';
-  // The guide box is 45% of the picture's width: a standard 37 mm product barcode then fills it at
-  // about 13-15 cm, within most phones' focus range. ?box=30 to ?box=90 overrides it for testing.
+  // People fit the barcode to the guide box, so its size sets their scanning distance. Sized for
+  // about 18 cm, which most phone cameras can focus at (recent iPhone Pro main lenses need ~20 cm,
+  // most others 8-15 cm): a 37 mm product barcode at 18 cm spans about 28% of an unzoomed
+  // portrait picture, so the box is 28% of the width times the zoom actually applied.
+  // ?box=20 to ?box=90 overrides the width for testing.
   const boxSetting = Number(params.get('box'));
-  if (boxSetting >= 30 && boxSetting <= 90) ui.viewfinder.style.setProperty('--guide-width', `${boxSetting}%`);
+  function sizeGuide() {
+    const width = boxSetting >= 20 && boxSetting <= 90 ? boxSetting : Math.min(60, Math.max(25, Math.round(28 * (zoomLevel || 1))));
+    ui.viewfinder.style.setProperty('--guide-width', `${width}%`);
+  }
   let pdfFile = null;
   let sharing = false;
   let prepareTimer = null;
@@ -475,7 +481,8 @@
       const track = ui.video.srcObject?.getVideoTracks?.()[0];
       zoomLevel = null;
       focusMode = null;
-      PocketScanner.zoom(track, zoomSetting).then((level) => { zoomLevel = level; });
+      sizeGuide();
+      PocketScanner.zoom(track, zoomSetting).then((level) => { zoomLevel = level; sizeGuide(); });
       PocketScanner.focus(track).then((mode) => {
         focusMode = mode;
         if (mode === 'single-shot' && currentSession === session) keepFocusing(track, currentSession);
