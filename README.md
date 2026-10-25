@@ -16,8 +16,9 @@ needed to serve the application. Camera access needs HTTPS (or localhost).
 - Minimal camera controls, flash and sound toggle.
 - 1D barcodes: Code 128, Code 39, Code 93, ITF and Codabar for warehouse
   labels, plus EAN-13, EAN-8, UPC-A and UPC-E product codes. Only Code 128
-  and Code 93 are accepted on a single read; the others are accepted after
-  two matching reads, because Code 39, ITF and Codabar have no mandatory
+  and Code 93 are accepted on a single read. The others are voted on over
+  1.5 s by both decoders: two matching reads, or three that lead when another
+  value was also read, because Code 39, ITF and Codabar have no mandatory
   checksum and a blurry product code can misread into another valid number.
 - A falling three-note sound and a long buzz when a scan is already in the
   batch (with "Skip duplicates" on).
@@ -30,7 +31,9 @@ needed to serve the application. Camera access needs HTTPS (or localhost).
 - Rear-lens picker on the live camera picture when the browser lists more than
   one rear camera (front cameras are never offered). The choice is remembered,
   by label as well as ID, because browsers may issue new camera IDs per visit.
-- Open the page with `?debug` to show decoder speed and camera settings.
+- Open the page with `?debug` to show decoder speed, camera resolution and
+  settings, and the last raw reads (`✓` accepted, `·` not yet). Add `&zoom=1`
+  to turn the mild zoom off or `&native=0` to scan with ZXing only.
 - Device-local barcode/photo storage.
 - PDF sharing: two-column table, barcode left and uncropped photograph right.
 - Three-note scan confirmation melody.

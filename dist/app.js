@@ -35,13 +35,20 @@
   let toastTimeout = null;
   let focusTimer = null;
   let focusRingTimer = null;
-  let pendingRead = { value: '', time: 0 };
+  // Recent weak-checksum reads from both decoders, which vote on the value.
+  let recentReads = [];
+  // Raw decoder output for the ?debug readout.
+  let readLog = [];
   let focusMode = null;
   let zoomLevel = null;
   let scanClock = 0;
   let lastScanMs = null;
   let debugTimer = null;
-  const debug = new URLSearchParams(location.search).has('debug');
+  const params = new URLSearchParams(location.search);
+  const debug = params.has('debug');
+  // Testing switches: ?zoom=1 turns the mild zoom off, ?native=0 leaves only ZXing scanning.
+  const zoomSetting = Number(params.get('zoom')) || 1.5;
+  const nativeAllowed = params.get('native') !== '0';
   let pdfFile = null;
   let sharing = false;
   let prepareTimer = null;
@@ -351,20 +358,29 @@
   }
 
   // Formats with weak or no checksums need two matching reads (from either decoder) in quick succession.
+  // Votes over the last 1.5 s: a value needs two reads, or three if any other value was read in
+  // that time, and must lead. Voting, rather than "two in a row", keeps a decoder that misreads
+  // from cancelling the other decoder's correct reads, and a disagreement demands more evidence.
   function confirmedRead(value, format) {
     if (!PocketScanner.weakFormats.includes(format)) return true;
     const now = Date.now();
-    if (pendingRead.value === value && now - pendingRead.time < 1500) {
-      pendingRead = { value: '', time: 0 };
-      return true;
-    }
-    pendingRead = { value, time: now };
-    return false;
+    recentReads = recentReads.filter((read) => now - read.time < 1500);
+    recentReads.push({ value, time: now });
+    const votes = new Map();
+    recentReads.forEach((read) => votes.set(read.value, (votes.get(read.value) || 0) + 1));
+    const mine = votes.get(value);
+    const rival = Math.max(0, ...[...votes].filter(([other]) => other !== value).map(([, count]) => count));
+    if (mine < (rival ? 3 : 2) || mine <= rival) return false;
+    recentReads = [];
+    return true;
   }
 
-  function cameraRead(raw, format) {
+  function cameraRead(raw, format, source) {
     const value = String(raw == null ? '' : raw).trim();
-    if (!value || !confirmedRead(value, format)) return;
+    if (!value) return;
+    const accepted = confirmedRead(value, format);
+    if (debug) readLog = [`${accepted ? '✓' : '·'} ${source} ${format} ${value}`, ...readLog].slice(0, 5);
+    if (!accepted) return;
     const item = addCode(value, format, true);
     if (!item) return;
     rememberPhoto(item, ui.video);
@@ -374,7 +390,7 @@
   }
 
   async function startNativeDecoder(currentSession) {
-    if (typeof window.BarcodeDetector !== 'function') {
+    if (!nativeAllowed || typeof window.BarcodeDetector !== 'function') {
       return;
     }
     try {
@@ -397,7 +413,7 @@
           const detected = await nativeDetector.detect(ui.video);
           if (currentSession === session) {
             for (const result of detected) {
-              cameraRead(result.rawValue, (result.format || 'Barcode').replaceAll('_', ' ').toUpperCase());
+              cameraRead(result.rawValue, (result.format || 'Barcode').replaceAll('_', ' ').toUpperCase(), 'native');
             }
           }
         } catch (error) {
@@ -443,7 +459,7 @@
         video: ui.video,
         region: guideRegion,
         onResult: (result) => {
-          if (scanning) cameraRead(result.text, (result.format || 'Barcode').replaceAll('_', ' '));
+          if (scanning) cameraRead(result.text, (result.format || 'Barcode').replaceAll('_', ' '), 'zxing');
         }
       });
       starting = false;
@@ -455,7 +471,7 @@
       const track = ui.video.srcObject?.getVideoTracks?.()[0];
       zoomLevel = null;
       focusMode = null;
-      PocketScanner.zoom(track).then((level) => { zoomLevel = level; });
+      PocketScanner.zoom(track, zoomSetting).then((level) => { zoomLevel = level; });
       PocketScanner.focus(track).then((mode) => {
         focusMode = mode;
         if (mode === 'single-shot' && currentSession === session) keepFocusing(track, currentSession);
@@ -558,8 +574,9 @@
         `native ${nativeDetector ? 'on' : 'off'}`,
         `zoom ${zoomLevel ? `${zoomLevel}×` : 'n/a'}`,
         `focus ${focusMode || 'n/a'}`,
-        `last scan ${lastScanMs == null ? '–' : `${(lastScanMs / 1000).toFixed(1)} s`}`
-      ].join(' · ');
+        `last scan ${lastScanMs == null ? '–' : `${(lastScanMs / 1000).toFixed(1)} s`}`,
+        `camera ${ui.video.videoWidth}×${ui.video.videoHeight}`
+      ].join(' · ') + (readLog.length ? `\n${readLog.join('\n')}` : '');
       stats.attempts = 0;
       stats.busyMs = 0;
       stats.grabMs = 0;
