@@ -1,7 +1,6 @@
 /* Focused decoding uses temporary canvases; saved photos always use the full video. */
 (() => {
-  // Warehouse label symbologies; retail product codes (EAN/UPC) are deliberately not searched.
-  const linearFormats = ['CODE_128', 'CODE_39', 'CODE_93', 'ITF', 'CODABAR'];
+  // The same warehouse symbologies as decoder.js, in BarcodeDetector naming.
   const nativeFormats = ['code_128', 'code_39', 'code_93', 'itf', 'codabar'];
   // No mandatory checksum: the app only accepts these after two matching reads.
   const weakFormats = ['CODE 39', 'ITF', 'CODABAR'];
@@ -11,37 +10,22 @@
     ['band', false, false], ['full', false, false], ['band', false, false],
     ['full', true, false], ['band', false, false], ['band', false, true]
   ];
-  function createReader(ZXing, options) {
-    const hints = new Map([
-      [ZXing.DecodeHintType.POSSIBLE_FORMATS, linearFormats.map(name => ZXing.BarcodeFormat[name])]
-    ]);
-    // This reader only instantiates 1D decoders; no QR, matrix, or PDF417 search.
-    const reader = new ZXing.BrowserBarcodeReader(120, hints);
-    configure(reader, ZXing, options);
-    return reader;
-  }
   async function nativeDetector(Detector) {
     const supported = typeof Detector.getSupportedFormats === 'function' ? await Detector.getSupportedFormats() : nativeFormats;
     const formats = nativeFormats.filter(format => supported.includes(format));
     return formats.length ? new Detector({ formats }) : null;
   }
   const unit = (value) => Math.min(1, Math.max(0, value));
-  // region() returns the guide box in frame coordinates (0 to 1); defaults to the middle 40%.
-  function configure(reader, ZXing, { region } = {}) {
-    // Yield between failed attempts so camera autofocus, native detection and UI can run.
-    reader.timeBetweenDecodingAttempts = 30;
-    const fast = reader.hints;
-    const thorough = new Map(fast).set(ZXing.DecodeHintType.TRY_HARDER, true);
-    const originalDecode = reader.decode.bind(reader);
+
+  // Copies the next pass's crop of the video into RGBA pixels. region() returns the guide box in
+  // frame coordinates (0 to 1) and defaults to the middle 40%.
+  function frameGrabber(region) {
     const canvas = document.createElement('canvas');
     const context = canvas.getContext('2d', { willReadFrequently: true });
-    const stats = { attempts: 0, busyMs: 0 };
-    reader.stats = stats;
     let pass = 0;
-    reader.decode = function(source) {
-      const w = source.videoWidth, h = source.videoHeight;
-      if (!w || !h || !context) return originalDecode(source);
-      const started = Date.now();
+    return function grab(video) {
+      const w = video.videoWidth, h = video.videoHeight;
+      if (!w || !h || !context) return null;
       const [area, rotate, tryHarder] = passes[pass++ % passes.length];
       let sx = 0, sy = 0, sw = w, sh = h;
       if (area === 'band') {
@@ -57,16 +41,89 @@
       canvas.width = rotate ? dh : dw;
       canvas.height = rotate ? dw : dh;
       if (rotate) { context.translate(canvas.width, 0); context.rotate(Math.PI / 2); }
-      context.drawImage(source, sx, sy, sw, sh, 0, 0, dw, dh);
-      const luminance = new ZXing.HTMLCanvasElementLuminanceSource(canvas);
-      // Sideways reads have their own pass; stop TRY_HARDER from doubling its cost by retrying rotated.
-      luminance.isRotateSupported = () => false;
-      try {
-        return reader.reader.decode(new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(luminance)), tryHarder ? thorough : fast);
-      } finally {
+      context.drawImage(video, sx, sy, sw, sh, 0, 0, dw, dh);
+      const image = context.getImageData(0, 0, canvas.width, canvas.height);
+      return { data: image.data, width: image.width, height: image.height, tryHarder };
+    };
+  }
+
+  function loadScript(src) {
+    return new Promise((resolve, reject) => {
+      const script = document.createElement('script');
+      script.src = src;
+      script.onload = resolve;
+      script.onerror = () => reject(new Error(`Could not load ${src}`));
+      document.head.append(script);
+    });
+  }
+
+  // Decodes video frames with ZXing in a worker, one frame in flight at a time, so decoding never
+  // blocks the page. If workers are unavailable it decodes on the page between short pauses instead.
+  function createScanner({ video, region, onResult, workerUrl = './decode-worker.js' }) {
+    const grab = frameGrabber(region);
+    const stats = { attempts: 0, busyMs: 0, grabMs: 0, mode: 'worker' };
+    let worker = null, local = null, running = false, busy = false, timer = null, id = 0, backup = false;
+    const pause = () => backup ? 200 : worker ? 15 : 30;
+    function schedule(ms) {
+      clearTimeout(timer);
+      timer = running ? setTimeout(tick, ms) : null;
+    }
+    function finish(result) {
+      busy = false;
+      if (!running) return;
+      if (result) onResult(result);
+      schedule(result ? 120 : pause());
+    }
+    function useMainThread() {
+      worker?.terminate();
+      worker = null;
+      stats.mode = 'main';
+      busy = false;
+      // ZXing is only loaded onto the page when the worker cannot run it.
+      const ready = window.ZXing ? Promise.resolve() : loadScript('./vendor/zxing.min.js');
+      local = ready.then(() => window.PocketDecoder || loadScript('./decoder.js'))
+        .then(() => window.PocketDecoder.create(window.ZXing));
+      local.then(() => schedule(0), () => { stats.mode = 'unavailable'; });
+    }
+    try {
+      worker = new Worker(workerUrl);
+      worker.onmessage = ({ data }) => {
+        if (data.id !== id) return; // From before the camera was restarted.
         stats.attempts++;
-        stats.busyMs += Date.now() - started;
+        stats.busyMs += data.ms;
+        finish(data.result);
+      };
+      worker.onerror = (event) => { event.preventDefault?.(); useMainThread(); };
+    } catch (_) { useMainThread(); }
+
+    function tick() {
+      timer = null;
+      if (!running || busy) return;
+      if (video.readyState < 2) { schedule(50); return; }
+      const started = Date.now();
+      const frame = grab(video);
+      stats.grabMs += Date.now() - started;
+      if (!frame) { schedule(50); return; }
+      busy = true;
+      if (worker) {
+        worker.postMessage({ id: ++id, buffer: frame.data.buffer, width: frame.width, height: frame.height, tryHarder: frame.tryHarder }, [frame.data.buffer]);
+        return;
       }
+      local.then((decode) => {
+        const decodeStarted = Date.now();
+        let result = null;
+        try { result = decode(frame.data, frame.width, frame.height, frame.tryHarder); } catch (_) { /* Lose only this frame. */ }
+        stats.attempts++;
+        stats.busyMs += Date.now() - decodeStarted;
+        finish(result);
+      }, () => { busy = false; });
+    }
+    return {
+      stats,
+      start() { running = true; busy = false; id++; schedule(0); },
+      stop() { running = false; busy = false; id++; schedule(0); },
+      // While the native detector leads, ZXing only runs as a slower backup.
+      setBackup(on) { backup = on; }
     };
   }
   // applyConstraints replaces earlier advanced constraints, so every call re-sends the settings in force.
@@ -118,5 +175,5 @@
     } catch (_) { return null; }
   }
   const torch = (track, on) => apply(track, { torch: on });
-  window.PocketScanner = { createReader, nativeDetector, configure, focus, focusAt, zoom, torch, weakFormats };
+  window.PocketScanner = { createScanner, frameGrabber, nativeDetector, focus, focusAt, zoom, torch, weakFormats };
 })();

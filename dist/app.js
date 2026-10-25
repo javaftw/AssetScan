@@ -356,13 +356,6 @@
     scanClock = now;
   }
 
-  function captureResult(result) {
-    const value = typeof result.getText === 'function' ? result.getText() : result.text;
-    const formatId = typeof result.getBarcodeFormat === 'function' ? result.getBarcodeFormat() : null;
-    const formatName = formatId == null ? 'Barcode' : (ZXing.BarcodeFormat?.[formatId] ?? String(formatId));
-    cameraRead(value, String(formatName).replaceAll('_', ' '));
-  }
-
   async function startNativeDecoder(currentSession) {
     if (typeof window.BarcodeDetector !== 'function') {
       return;
@@ -378,7 +371,7 @@
       return;
     }
     // The native detector leads; ZXing keeps running as a slower backup so it does not crowd it out.
-    if (scanner) scanner.timeBetweenDecodingAttempts = 200;
+    scanner?.setBackup(true);
     const tick = async () => {
       if (currentSession !== session || !scanning || !nativeDetector) return;
       if (!nativeBusy && ui.video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
@@ -393,7 +386,7 @@
         } catch (error) {
           // Some browsers expose BarcodeDetector but do not implement video detection.
           nativeDetector = null;
-          if (scanner) scanner.timeBetweenDecodingAttempts = 30;
+          scanner?.setBackup(false);
         } finally {
           nativeBusy = false;
         }
@@ -409,7 +402,7 @@
       setStatus('Camera access requires HTTPS and a compatible browser. Open this page in Chrome or Safari.', 'bad');
       return;
     }
-    if (!window.ZXing?.BrowserBarcodeReader || !window.PocketScanner) {
+    if (!window.PocketScanner) {
       setStatus('The barcode decoder did not load. Please refresh the page.', 'bad');
       return;
     }
@@ -420,22 +413,30 @@
     updateCameraUi();
     setStatus('Opening rear camera at HD resolution…');
     try {
-      const reader = PocketScanner.createReader(ZXing, { region: guideRegion });
-      scanner = reader;
-      await reader.decodeFromConstraints({ audio: false, video: {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: {
         facingMode: { ideal: 'environment' },
         width: { ideal: 1920 }, height: { ideal: 1080 }, frameRate: { ideal: 30 }
-      } }, ui.video, (result) => {
-        if (session !== currentSession || !result) return;
-        captureResult(result);
-      });
+      } });
       if (session !== currentSession) {
-        reader.reset();
+        stream.getTracks().forEach((track) => track.stop());
         return;
       }
+      ui.video.srcObject = stream;
+      await ui.video.play();
+      if (session !== currentSession) return;
+      // One scanner (and its decode worker) is kept for the page's lifetime and restarted per session.
+      scanner ||= PocketScanner.createScanner({
+        video: ui.video,
+        region: guideRegion,
+        onResult: (result) => {
+          if (scanning) cameraRead(result.text, (result.format || 'Barcode').replaceAll('_', ' '));
+        }
+      });
       starting = false;
       scanning = true;
       updateCameraUi();
+      scanner.setBackup(false);
+      scanner.start();
       setStatus('Scanning… Tap the picture to focus.');
       const track = ui.video.srcObject?.getVideoTracks?.()[0];
       zoomLevel = null;
@@ -481,8 +482,7 @@
     clearInterval(debugTimer);
     ui.debug.hidden = true;
     nativeDetector = null;
-    try { scanner?.reset(); } catch (error) { /* Stream may already be stopped. */ }
-    scanner = null;
+    scanner?.stop();
     try { ui.video.srcObject?.getTracks().forEach((track) => track.stop()); } catch (error) {}
     ui.video.srcObject = null;
     updateCameraUi();
@@ -538,7 +538,7 @@
       const rate = stats.attempts / seconds;
       const average = stats.attempts ? stats.busyMs / stats.attempts : 0;
       ui.debug.textContent = [
-        `ZXing ${rate.toFixed(0)}/s · ${average.toFixed(0)} ms each`,
+        `ZXing ${stats.mode} ${rate.toFixed(0)}/s · ${average.toFixed(0)} ms each · grab ${(stats.attempts ? stats.grabMs / stats.attempts : 0).toFixed(0)} ms`,
         `native ${nativeDetector ? 'on' : 'off'}`,
         `zoom ${zoomLevel ? `${zoomLevel}×` : 'n/a'}`,
         `focus ${focusMode || 'n/a'}`,
@@ -546,6 +546,7 @@
       ].join(' · ');
       stats.attempts = 0;
       stats.busyMs = 0;
+      stats.grabMs = 0;
       last = now;
     };
     update();

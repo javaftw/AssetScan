@@ -1,6 +1,6 @@
 /* Optional offline app shell. The barcode batch remains in device-local storage. */
-const CACHE = 'pocketscan-static-v7';
-const SHELL = ['./', './index.html', './styles.css', './app.js', './scanner.js', './media.js', './icon.svg', './manifest.webmanifest', './vendor/zxing.min.js'];
+const CACHE = 'pocketscan-static-v8';
+const SHELL = ['./', './index.html', './styles.css', './app.js', './scanner.js', './decoder.js', './decode-worker.js', './media.js', './icon.svg', './manifest.webmanifest', './vendor/zxing.min.js'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(SHELL)).then(() => self.skipWaiting()));
