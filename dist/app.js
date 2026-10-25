@@ -7,7 +7,7 @@
   const $ = (id) => document.getElementById(id);
   const ui = {
     headingCount: $('batch-heading-count'), list: $('batch-list'), empty: $('empty-batch'),
-    video: $('camera-video'), viewport: $('camera-viewport'),
+    video: $('camera-video'), viewport: $('camera-viewport'), focusRing: $('focus-ring'),
     scanToggle: $('scan-toggle'), scanIcon: $('scan-button-icon'), scanLabel: $('scan-button-label'),
     status: $('scan-status'), torch: $('torch-toggle'), sound: $('sound-toggle'),
     duplicate: $('skip-duplicates'),
@@ -29,6 +29,8 @@
   let lastDetection = { value: '', time: 0 };
   let lastDuplicateNotice = 0;
   let toastTimeout = null;
+  let focusTimer = null;
+  let focusRingTimer = null;
   let pdfFile = null;
   let sharing = false;
   let prepareTimer = null;
@@ -402,8 +404,11 @@
       starting = false;
       scanning = true;
       updateCameraUi();
-      setStatus('Scanning…');
-      PocketScanner.focus(ui.video.srcObject?.getVideoTracks?.()[0]);
+      setStatus('Scanning… Tap the picture to focus.');
+      const track = ui.video.srcObject?.getVideoTracks?.()[0];
+      PocketScanner.focus(track).then((mode) => {
+        if (mode === 'single-shot' && currentSession === session) keepFocusing(track, currentSession);
+      });
       updateTorchAvailability();
       startNativeDecoder(currentSession);
       setTimeout(() => {
@@ -433,6 +438,8 @@
     scanning = false;
     if (nativeTimer) clearTimeout(nativeTimer);
     nativeTimer = null;
+    clearTimeout(focusTimer);
+    ui.focusRing.classList.remove('show');
     nativeDetector = null;
     try { scanner?.reset(); } catch (error) { /* Stream may already be stopped. */ }
     scanner = null;
@@ -441,6 +448,57 @@
     updateCameraUi();
     clearTimeout(prepareTimer);
     if (codes.length && !pdfFile) prepareTimer = setTimeout(preparePdf, 250);
+  }
+
+  // Single-shot cameras focus once per request, so refocus regularly. After a tap-focus this
+  // also restores the default mode, which hands control back to continuous autofocus.
+  function keepFocusing(track, currentSession, delay = 3000) {
+    clearTimeout(focusTimer);
+    focusTimer = setTimeout(() => {
+      if (currentSession !== session || !scanning) return;
+      PocketScanner.focus(track).then((mode) => {
+        if (mode === 'single-shot' && currentSession === session && scanning) keepFocusing(track, currentSession);
+      });
+    }, delay);
+  }
+
+  // Maps a tap to the camera frame, which is letterboxed inside the video element (object-fit: contain).
+  function framePoint(event) {
+    const rect = ui.video.getBoundingClientRect();
+    const vw = ui.video.videoWidth, vh = ui.video.videoHeight;
+    if (!vw || !vh || !rect.width || !rect.height) return null;
+    const scale = Math.min(rect.width / vw, rect.height / vh);
+    const w = vw * scale, h = vh * scale;
+    const x = (event.clientX - rect.left - (rect.width - w) / 2) / w;
+    const y = (event.clientY - rect.top - (rect.height - h) / 2) / h;
+    return x >= 0 && x <= 1 && y >= 0 && y <= 1 ? { x, y } : null;
+  }
+
+  function showFocusRing(event) {
+    const rect = ui.viewport.getBoundingClientRect();
+    ui.focusRing.style.left = `${event.clientX - rect.left}px`;
+    ui.focusRing.style.top = `${event.clientY - rect.top}px`;
+    ui.focusRing.classList.add('show');
+    clearTimeout(focusRingTimer);
+    focusRingTimer = setTimeout(() => ui.focusRing.classList.remove('show'), 900);
+  }
+
+  function tapToFocus(event) {
+    const track = ui.video.srcObject?.getVideoTracks?.()[0];
+    if (!scanning || !track) return;
+    const point = framePoint(event);
+    if (!point) return;
+    showFocusRing(event);
+    const currentSession = session;
+    PocketScanner.focusAt(track, point.x, point.y).then((mode) => {
+      if (currentSession !== session) return;
+      if (!mode) {
+        ui.focusRing.classList.remove('show');
+        toast('This camera does not support tap-to-focus');
+        return;
+      }
+      keepFocusing(track, currentSession);
+    });
   }
 
   function updateTorchAvailability() {
@@ -550,6 +608,7 @@
       else startCamera();
     });
     ui.torch.addEventListener('click', toggleTorch);
+    ui.viewport.addEventListener('click', tapToFocus);
     ui.sound.addEventListener('click', () => {
       beepEnabled = !beepEnabled;
       if (beepEnabled) prepareBeep();

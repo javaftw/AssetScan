@@ -44,13 +44,28 @@
       return reader.decodeBitmap(new ZXing.BinaryBitmap(new ZXing.HybridBinarizer(luminance)));
     };
   }
-  async function focus(track) {
-    try {
-      const capabilities = track?.getCapabilities?.();
-      if (capabilities?.focusMode?.includes('continuous')) {
-        await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
-      }
-    } catch (_) { /* Optional camera tuning must never prevent scanning. */ }
+  function focusModes(track) {
+    try { return track?.getCapabilities?.()?.focusMode || []; } catch (_) { return []; }
   }
-  window.PocketScanner = { createReader, nativeDetector, configure, focus };
+  // Prefers continuous autofocus, falling back to single-shot. Resolves to the applied mode or null.
+  async function focus(track) {
+    const mode = ['continuous', 'single-shot'].find(m => focusModes(track).includes(m));
+    if (!mode) return null;
+    try {
+      await track.applyConstraints({ advanced: [{ focusMode: mode }] });
+      return mode;
+    } catch (_) { return null; /* Optional camera tuning must never prevent scanning. */ }
+  }
+  // Refocuses on a point of the frame (x, y from 0 to 1). Resolves to the mode used or null.
+  async function focusAt(track, x, y) {
+    const modes = focusModes(track);
+    const mode = ['single-shot', 'continuous'].find(m => modes.includes(m));
+    if (!mode) return null;
+    try {
+      // Advanced sets are tried in order: cameras without pointsOfInterest still restart focusing.
+      await track.applyConstraints({ advanced: [{ focusMode: mode, pointsOfInterest: [{ x, y }] }, { focusMode: mode }] });
+      return mode;
+    } catch (_) { return null; }
+  }
+  window.PocketScanner = { createReader, nativeDetector, configure, focus, focusAt };
 })();
