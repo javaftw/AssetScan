@@ -1,0 +1,1 @@
+{"name":"PocketScan — Barcode Collector","short_name":"PocketScan","description":"Capture a private barcode batch with your camera and export it as text or CSV.","start_url":"./","scope":"./","display":"standalone","background_color":"#0b1219","theme_color":"#0b1219","icons":[{"src":"./icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]}
