@@ -502,13 +502,14 @@
     }, delay);
   }
 
-  // Maps a screen point to the camera frame (0 to 1 inside it), which is letterboxed inside the
-  // video element (object-fit: contain).
+  // Maps a screen point to the camera frame (0 to 1 inside it). The frame fills the video element
+  // (object-fit: cover), so a portrait feed is cropped top and bottom rather than letterboxed and
+  // the guide box always lies on the picture.
   function toFrame(clientX, clientY) {
     const rect = ui.video.getBoundingClientRect();
     const vw = ui.video.videoWidth, vh = ui.video.videoHeight;
     if (!vw || !vh || !rect.width || !rect.height) return null;
-    const scale = Math.min(rect.width / vw, rect.height / vh);
+    const scale = Math.max(rect.width / vw, rect.height / vh);
     const w = vw * scale, h = vh * scale;
     return { x: (clientX - rect.left - (rect.width - w) / 2) / w, y: (clientY - rect.top - (rect.height - h) / 2) / h };
   }
