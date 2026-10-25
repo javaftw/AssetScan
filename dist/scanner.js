@@ -1,7 +1,7 @@
 /* Focused decoding uses temporary canvases; saved photos always use the full video. */
 (() => {
   // The same warehouse symbologies as decoder.js, in BarcodeDetector naming.
-  const nativeFormats = ['code_128', 'code_39', 'code_93', 'itf', 'codabar'];
+  const nativeFormats = ['code_128', 'code_39', 'code_93', 'itf', 'codabar', 'ean_13', 'ean_8', 'upc_a', 'upc_e'];
   // No mandatory checksum: the app only accepts these after two matching reads.
   const weakFormats = ['CODE 39', 'ITF', 'CODABAR'];
   // [area, rotated, thorough] per attempt. Most attempts are quick reads of the guide box at full

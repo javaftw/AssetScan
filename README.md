@@ -1,4 +1,4 @@
-# PocketScan v7
+# PocketScan v8
 
 Phone barcode scanner that collects codes with photos and shares them as a PDF.
 
@@ -14,9 +14,10 @@ Buildless HTML, CSS and JavaScript in `dist/`. No installation or build is
 needed to serve the application. Camera access needs HTTPS (or localhost).
 
 - Minimal camera controls, flash and sound toggle.
-- Warehouse 1D barcodes: Code 128, Code 39, Code 93, ITF and Codabar. Retail
-  EAN/UPC product codes are not searched. Code 39, ITF and Codabar have no
-  mandatory checksum, so they are only accepted after two matching reads.
+- 1D barcodes: Code 128, Code 39, Code 93, ITF and Codabar for warehouse
+  labels, plus EAN-13, EAN-8, UPC-A and UPC-E product codes. Code 39, ITF and
+  Codabar have no mandatory checksum, so they are only accepted after two
+  matching reads.
 - ZXing decodes in a background worker (`decode-worker.js`), so scanning never
   stalls the camera preview or the buttons. Without worker support it falls
   back to decoding on the page.

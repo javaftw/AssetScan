@@ -69,12 +69,14 @@ for(const vertical of [false,true]) for(const lowContrast of [false,true]) {
  assert(found.length,`Failed orientation=${vertical}, lowContrast=${lowContrast}`);
  found.forEach(r=>assert.deepEqual({...r},{text:value,format:'CODE_128'}));
 }
-// Retail EAN-13 product codes are not searched.
+// Retail EAN-13 product codes are read too.
 const L=['0001101','0011001','0010011','0111101','0100011','0110001','0101111','0111011','0110111','0001011'];
 const G=['0100111','0110011','0011011','0100001','0011101','0111001','0000101','0010001','0001001','0010111'];
 const ean='5901234123457', parity='LGGLLG';
 const bits='101'+[...ean.slice(1,7)].map((n,i)=>(parity[i]==='L'?L:G)[+n]).join('')+'01010'+[...ean.slice(7)].map(n=>L[+n].replace(/[01]/g,b=>b==='0'?'1':'0')).join('')+'101';
-assert.deepEqual(reads(draw(bits.match(/1+|0+/g).map(run=>run.length),false,false,7)),Array(PASSES).fill(null));
+const eanReads=reads(draw(bits.match(/1+|0+/g).map(run=>run.length),false,false,7)).filter(Boolean);
+assert(eanReads.length,'EAN-13 not read');
+eanReads.forEach(r=>assert.deepEqual({...r},{text:ean,format:'EAN_13'}));
 // The guide box region is honoured: a box away from the barcode misses it on band passes.
 const boxed=P.frameGrabber(()=>({x:0,y:0,width:1,height:.2}))(draw(widths,false,false,4));
 assert.equal(boxed.height,216);
@@ -114,7 +116,7 @@ function scanOnce(Worker){
  let options;
  class Native { static async getSupportedFormats(){return ['qr_code','data_matrix','ean_13','code_128','pdf417']} constructor(value){options=value} }
  await P.nativeDetector(Native);
- assert.deepEqual(Array.from(options.formats),['code_128']);
+ assert.deepEqual(Array.from(options.formats),['code_128','ean_13']);
  class TwoDOnly { static async getSupportedFormats(){return ['qr_code','data_matrix']} constructor(){throw Error('Must not instantiate')} }
  assert.equal(await P.nativeDetector(TwoDOnly),null);
  let calls=0;
@@ -137,5 +139,5 @@ function scanOnce(Worker){
  await Promise.all([P.focus(camera),P.torch(camera,true)]);
  assert.deepEqual(JSON.parse(JSON.stringify(sent.advanced)),[{zoom:1.5,focusMode:'continuous',torch:true}],'Settings must accumulate, not replace each other');
  assert.equal(await P.zoom({getCapabilities(){return {zoom:{min:1,max:1}}}}),null);
- console.log('PASS: Code 128 decoding horizontal/vertical, normal/reduced contrast, guide-box region, EAN-13 and QR ignored; decoding through the worker script and the on-page fallback, stale results dropped; zoom/torch/focus kept together, single-shot fallback, tap-to-focus, native decoder restricted to 1D.');
+ console.log('PASS: Code 128 decoding horizontal/vertical, normal/reduced contrast, guide-box region, EAN-13 read, QR ignored; decoding through the worker script and the on-page fallback, stale results dropped; zoom/torch/focus kept together, single-shot fallback, tap-to-focus, native decoder restricted to 1D.');
 })().catch(e=>{console.error(e);process.exitCode=1});

@@ -1,7 +1,7 @@
 /* ZXing 1D decoding of one RGBA frame. Shared by the decode worker and the main-thread fallback. */
 (() => {
-  // Warehouse label symbologies; retail product codes (EAN/UPC) are deliberately not searched.
-  const formats = ['CODE_128', 'CODE_39', 'CODE_93', 'ITF', 'CODABAR'];
+  // Warehouse label symbologies plus retail product codes (EAN/UPC).
+  const formats = ['CODE_128', 'CODE_39', 'CODE_93', 'ITF', 'CODABAR', 'EAN_13', 'EAN_8', 'UPC_A', 'UPC_E'];
   function create(ZXing) {
     const fast = new Map([[ZXing.DecodeHintType.POSSIBLE_FORMATS, formats.map(name => ZXing.BarcodeFormat[name])]]);
     const thorough = new Map(fast).set(ZXing.DecodeHintType.TRY_HARDER, true);
