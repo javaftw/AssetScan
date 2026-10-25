@@ -244,27 +244,37 @@
     } catch (error) { /* Haptic feedback is sufficient. */ }
   }
 
-  function signalSuccess() {
-    if (navigator.vibrate) navigator.vibrate([75, 45, 90]);
+  function playNotes(pitches, { type, step, length, volume }) {
     if (!beepEnabled || !audioContext || audioContext.state !== 'running') return;
     try {
       const now = audioContext.currentTime;
-      // Bright three-note major-chord arpeggio with a short, friendly tail.
-      [659.25, 830.61, 987.77].forEach((pitch, i) => {
-        const begin = now + i * .14;
-        const end = begin + .28;
+      pitches.forEach((pitch, i) => {
+        const begin = now + i * step;
+        const end = begin + length;
         const oscillator = audioContext.createOscillator();
         const gain = audioContext.createGain();
-        oscillator.type = 'triangle';
+        oscillator.type = type;
         oscillator.frequency.setValueAtTime(pitch, begin);
         gain.gain.setValueAtTime(.0001, begin);
-        gain.gain.exponentialRampToValueAtTime(.45, begin + .012);
+        gain.gain.exponentialRampToValueAtTime(volume, begin + .012);
         gain.gain.exponentialRampToValueAtTime(.0001, end);
         oscillator.connect(gain).connect(audioContext.destination);
         oscillator.start(begin);
         oscillator.stop(end + .01);
       });
     } catch (error) { /* Sound is optional. */ }
+  }
+
+  function signalSuccess() {
+    if (navigator.vibrate) navigator.vibrate([75, 45, 90]);
+    // Bright three-note major-chord arpeggio with a short, friendly tail.
+    playNotes([659.25, 830.61, 987.77], { type: 'triangle', step: .14, length: .28, volume: .45 });
+  }
+
+  function signalDuplicate() {
+    if (navigator.vibrate) navigator.vibrate(220);
+    // Low falling "nope" (G4, E♭4, B3) in a buzzier tone, clearly unlike the success melody.
+    playNotes([392, 311.13, 246.94], { type: 'square', step: .12, length: .2, volume: .18 });
   }
 
   function addCode(raw, format = 'Unknown', fromCamera = false) {
@@ -281,6 +291,7 @@
       if (now - lastDuplicateNotice > 1600) {
         setStatus(`Already in batch: ${value}`, 'warn');
         lastDuplicateNotice = now;
+        signalDuplicate();
       }
       return null;
     }
@@ -333,7 +344,7 @@
     }
   }
 
-  // Formats without a mandatory checksum need two matching reads (from either decoder) in quick succession.
+  // Formats with weak or no checksums need two matching reads (from either decoder) in quick succession.
   function confirmedRead(value, format) {
     if (!PocketScanner.weakFormats.includes(format)) return true;
     const now = Date.now();

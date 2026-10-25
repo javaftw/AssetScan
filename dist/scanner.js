@@ -2,8 +2,9 @@
 (() => {
   // The same warehouse symbologies as decoder.js, in BarcodeDetector naming.
   const nativeFormats = ['code_128', 'code_39', 'code_93', 'itf', 'codabar', 'ean_13', 'ean_8', 'upc_a', 'upc_e'];
-  // No mandatory checksum: the app only accepts these after two matching reads.
-  const weakFormats = ['CODE 39', 'ITF', 'CODABAR'];
+  // Accepted only after two matching reads: Code 39, ITF and Codabar have no mandatory checksum, and
+  // a blurry EAN/UPC can misread into another number that still passes its single check digit.
+  const weakFormats = ['CODE 39', 'ITF', 'CODABAR', 'EAN 13', 'EAN 8', 'UPC A', 'UPC E'];
   // [area, rotated, thorough] per attempt. Most attempts are quick reads of the guide box at full
   // camera resolution; whole-frame, sideways and exhaustive (TRY_HARDER) reads are interleaved.
   const passes = [

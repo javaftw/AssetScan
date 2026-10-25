@@ -15,9 +15,12 @@ needed to serve the application. Camera access needs HTTPS (or localhost).
 
 - Minimal camera controls, flash and sound toggle.
 - 1D barcodes: Code 128, Code 39, Code 93, ITF and Codabar for warehouse
-  labels, plus EAN-13, EAN-8, UPC-A and UPC-E product codes. Code 39, ITF and
-  Codabar have no mandatory checksum, so they are only accepted after two
-  matching reads.
+  labels, plus EAN-13, EAN-8, UPC-A and UPC-E product codes. Only Code 128
+  and Code 93 are accepted on a single read; the others are accepted after
+  two matching reads, because Code 39, ITF and Codabar have no mandatory
+  checksum and a blurry product code can misread into another valid number.
+- A falling three-note sound and a long buzz when a scan is already in the
+  batch (with "Skip duplicates" on).
 - ZXing decodes in a background worker (`decode-worker.js`), so scanning never
   stalls the camera preview or the buttons. Without worker support it falls
   back to decoding on the page.
@@ -42,6 +45,7 @@ The Node test tools require `sharp` and `@napi-rs/canvas`:
     node tests/scanner-smoke.cjs
     node tests/share-smoke.cjs
     node tests/report-smoke.cjs
+    node tests/read-smoke.cjs
 
 The report test writes sample files to `/tmp`; adjust those test paths for
 Windows.
