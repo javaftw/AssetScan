@@ -16,7 +16,7 @@ async function scenario(navigator) {
 }
 (async()=>{
  const prep = source.slice(source.indexOf('  async function preparePdf()'), source.indexOf('  function savePdfForSharing('));
- const p = { codes:[{}], batchVersion:1, pendingPhotos:new Set(), scanning:false, starting:false, File, PocketMedia:{async report(){return new Blob(['%PDF-1.4'],{type:'application/pdf'})}}, fileName(){return 'test.pdf'},ui:{sharePdf:{querySelector(){return {}}}},setStatus(){},pdfFile:null};
+ const p = { codes:[{}], batchVersion:1, pendingPhotos:new Set(), scanning:false, starting:false, File, AssetMedia:{async report(){return new Blob(['%PDF-1.4'],{type:'application/pdf'})}}, fileName(){return 'test.pdf'},ui:{sharePdf:{querySelector(){return {}}}},setStatus(){},pdfFile:null};
  vm.createContext(p); vm.runInContext(prep,p); await p.preparePdf();
  assert.equal(p.pdfFile.type,'application/pdf');
  assert.equal(p.pdfFile.name,'test.pdf');

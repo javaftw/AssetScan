@@ -1,9 +1,9 @@
-/* PocketScan. Barcodes are kept only in this browser until explicitly exported. */
+/* AssetScan. Barcodes are kept only in this browser until explicitly exported. */
 (() => {
   'use strict';
 
-  const DATA_KEY = 'pocketscan.batch.v1';
-  const PREF_KEY = 'pocketscan.preferences.v1';
+  const DATA_KEY = 'assetscan.batch.v1';
+  const PREF_KEY = 'assetscan.preferences.v1';
   const $ = (id) => document.getElementById(id);
   const ui = {
     headingCount: $('batch-heading-count'), list: $('batch-list'), empty: $('empty-batch'),
@@ -116,8 +116,8 @@
   // Photos whose code is gone, e.g. removals that could still be undone when the page closed.
   function removeOrphanPhotos() {
     const live = new Set(codes.map((item) => item.id));
-    PocketMedia.keys().then((ids) => {
-      ids.filter((id) => !live.has(id)).forEach((id) => PocketMedia.remove(id).catch(() => {}));
+    AssetMedia.keys().then((ids) => {
+      ids.filter((id) => !live.has(id)).forEach((id) => AssetMedia.remove(id).catch(() => {}));
     }).catch(() => {});
   }
 
@@ -127,7 +127,7 @@
   }
 
   function discard(action) {
-    if (action.type === 'remove') PocketMedia.remove(action.item.id).catch(() => {});
+    if (action.type === 'remove') AssetMedia.remove(action.item.id).catch(() => {});
   }
 
   function isKept(id) {
@@ -181,7 +181,7 @@
   function loadPhoto(item) {
     if (thumbs.has(item.id) || capturing.has(item.id) || loadingThumbs.has(item.id)) return;
     loadingThumbs.add(item.id);
-    PocketMedia.get(item.id).then((saved) => (saved?.blob ? URL.createObjectURL(saved.blob) : null), () => null).then((url) => {
+    AssetMedia.get(item.id).then((saved) => (saved?.blob ? URL.createObjectURL(saved.blob) : null), () => null).then((url) => {
       loadingThumbs.delete(item.id);
       if (thumbs.has(item.id) || !photoCells.has(item.id)) {
         if (url) URL.revokeObjectURL(url);
@@ -331,9 +331,9 @@
   function rememberPhoto(item, source) {
     if (!item) return;
     // drawImage runs immediately, preserving the decoded camera frame before it changes.
-    const task = PocketMedia.capture(source).then(async (image) => {
+    const task = AssetMedia.capture(source).then(async (image) => {
       if (!isKept(item.id)) return null;
-      await PocketMedia.save({ id: item.id, ...image });
+      await AssetMedia.save({ id: item.id, ...image });
       return URL.createObjectURL(image.blob);
     }).catch(() => {
       setStatus(`Captured ${item.value}, but the photo could not be stored. Check browser storage space.`, 'warn');
@@ -372,7 +372,7 @@
   // that time, and must lead. Voting, rather than "two in a row", keeps a decoder that misreads
   // from cancelling the other decoder's correct reads, and a disagreement demands more evidence.
   function confirmedRead(value, format) {
-    if (!PocketScanner.weakFormats.includes(format)) return true;
+    if (!AssetScanner.weakFormats.includes(format)) return true;
     const now = Date.now();
     recentReads = recentReads.filter((read) => now - read.time < 1500);
     recentReads.push({ value, time: now });
@@ -405,7 +405,7 @@
     }
     try {
       // A native implementation is faster on many Android Chrome devices.
-      const detector = await PocketScanner.nativeDetector(window.BarcodeDetector);
+      const detector = await AssetScanner.nativeDetector(window.BarcodeDetector);
       if (currentSession !== session || !scanning) return;
       nativeDetector = detector;
       if (!detector) return;
@@ -445,7 +445,7 @@
       setStatus('Camera access requires HTTPS and a compatible browser. Open this page in Chrome or Safari.', 'bad');
       return;
     }
-    if (!window.PocketScanner) {
+    if (!window.AssetScanner) {
       setStatus('The barcode decoder did not load. Please refresh the page.', 'bad');
       return;
     }
@@ -465,7 +465,7 @@
       await ui.video.play();
       if (session !== currentSession) return;
       // One scanner (and its decode worker) is kept for the page's lifetime and restarted per session.
-      scanner ||= PocketScanner.createScanner({
+      scanner ||= AssetScanner.createScanner({
         video: ui.video,
         region: guideRegion,
         onResult: (result) => {
@@ -482,8 +482,8 @@
       zoomLevel = null;
       focusMode = null;
       sizeGuide();
-      PocketScanner.zoom(track, zoomSetting).then((level) => { zoomLevel = level; sizeGuide(); });
-      PocketScanner.focus(track).then((mode) => {
+      AssetScanner.zoom(track, zoomSetting).then((level) => { zoomLevel = level; sizeGuide(); });
+      AssetScanner.focus(track).then((mode) => {
         focusMode = mode;
         if (mode === 'single-shot' && currentSession === session) keepFocusing(track, currentSession);
       });
@@ -538,7 +538,7 @@
     clearTimeout(focusTimer);
     focusTimer = setTimeout(() => {
       if (currentSession !== session || !scanning) return;
-      PocketScanner.focus(track).then((mode) => {
+      AssetScanner.focus(track).then((mode) => {
         if (mode === 'single-shot' && currentSession === session && scanning) keepFocusing(track, currentSession);
       });
     }, delay);
@@ -616,7 +616,7 @@
     if (!point) return;
     showFocusRing(event);
     const currentSession = session;
-    PocketScanner.focusAt(track, point.x, point.y).then((mode) => {
+    AssetScanner.focusAt(track, point.x, point.y).then((mode) => {
       if (currentSession !== session) return;
       if (!mode) {
         ui.focusRing.classList.remove('show');
@@ -643,7 +643,7 @@
     // look the lens up by its label and switch to it if it is still there.
     const stream = await open();
     const devices = await navigator.mediaDevices.enumerateDevices().catch(() => []);
-    const match = PocketScanner.rearLenses(devices.filter((device) => device.kind === 'videoinput'))
+    const match = AssetScanner.rearLenses(devices.filter((device) => device.kind === 'videoinput'))
       .find((lens) => lensLabel && lens.label === lensLabel);
     lensId = match ? match.id : '';
     if (!match) lensLabel = '';
@@ -660,7 +660,7 @@
     let devices = [];
     try { devices = await navigator.mediaDevices.enumerateDevices(); } catch (error) { return; }
     const cameras = devices.filter((device) => device.kind === 'videoinput');
-    const lenses = cameras.some((device) => device.label) ? PocketScanner.rearLenses(cameras) : [];
+    const lenses = cameras.some((device) => device.label) ? AssetScanner.rearLenses(cameras) : [];
     const active = ui.video.srcObject?.getVideoTracks?.()[0]?.getSettings?.().deviceId;
     const current = lenses.find((lens) => lens.id === active);
     const auto = new Option(!lensId && current ? `Auto · ${current.name}` : 'Auto', '');
@@ -684,7 +684,7 @@
     const track = ui.video.srcObject?.getVideoTracks?.()[0];
     if (!track) return;
     try {
-      await PocketScanner.torch(track, !torchEnabled);
+      await AssetScanner.torch(track, !torchEnabled);
       torchEnabled = !torchEnabled;
       ui.torch.classList.toggle('is-on', torchEnabled);
       ui.torch.setAttribute('aria-pressed', String(torchEnabled));
@@ -713,7 +713,7 @@
     try {
       await Promise.allSettled([...pendingPhotos]);
       if (version !== batchVersion || scanning || starting) return;
-      const pdf = await PocketMedia.report(codes.slice());
+      const pdf = await AssetMedia.report(codes.slice());
       if (version !== batchVersion) return;
       pdfFile = new File([pdf], fileName(), { type: 'application/pdf' });
       ui.sharePdf.disabled = false;
@@ -801,7 +801,7 @@
       if (!action) return;
       if (action.type === 'add') {
         codes = codes.filter((code) => code.id !== action.item.id);
-        PocketMedia.remove(action.item.id).catch(() => {});
+        AssetMedia.remove(action.item.id).catch(() => {});
         toast('Last scan undone');
       } else {
         codes.splice(Math.min(action.index, codes.length), 0, action.item);
@@ -817,7 +817,7 @@
       codes = [];
       undoStack.forEach(discard);
       undoStack = [];
-      removed.forEach((id) => PocketMedia.remove(id).catch(() => {}));
+      removed.forEach((id) => AssetMedia.remove(id).catch(() => {}));
       save(); render();
       setStatus('Batch cleared. Ready to scan a new set.');
       toast('Batch cleared');

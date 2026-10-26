@@ -26,5 +26,5 @@
       }
     };
   }
-  self.PocketDecoder = { create, formats };
+  self.AssetDecoder = { create, formats };
 })();

@@ -42,10 +42,10 @@ function workerClass({fail = false} = {}) {
  };
 }
 
-const P = page(workerClass()).PocketScanner;
+const P = page(workerClass()).AssetScanner;
 const decoderScope = {}; decoderScope.self = decoderScope; vm.createContext(decoderScope);
 vm.runInContext(source('decoder.js'), decoderScope);
-const decode = decoderScope.PocketDecoder.create(ZXing);
+const decode = decoderScope.AssetDecoder.create(ZXing);
 
 // Code 128 (set B) drawn from ZXing's own pattern table: start, data, checksum, stop.
 const value='PS-12345';
@@ -85,7 +85,7 @@ assert.equal(decode(boxed.data,boxed.width,boxed.height,boxed.tryHarder),null);
 function scanOnce(Worker){
  const scope=page(Worker), video=draw(widths,false,false,4);
  return new Promise((resolve)=>{
-  const scanner=scope.PocketScanner.createScanner({video,onResult(result){scanner.stop();resolve({result,stats:scanner.stats});}});
+  const scanner=scope.AssetScanner.createScanner({video,onResult(result){scanner.stop();resolve({result,stats:scanner.stats});}});
   scanner.start();
  });
 }
@@ -102,12 +102,12 @@ function scanOnce(Worker){
  // Stopping discards a result still in flight.
  const scope=page(workerClass());
  let late=0;
- const stopped=scope.PocketScanner.createScanner({video:draw(widths,false,false,4),onResult(){late++}});
+ const stopped=scope.AssetScanner.createScanner({video:draw(widths,false,false,4),onResult(){late++}});
  stopped.start(); stopped.stop();
  await new Promise(r=>setTimeout(r,300));
  assert.equal(late,0);
 
- const matrix = new ZXing.QRCodeWriter().encode('POCKETSCAN-2D-MUST-BE-IGNORED', ZXing.BarcodeFormat.QR_CODE, 360, 360, new Map());
+ const matrix = new ZXing.QRCodeWriter().encode('ASSETSCAN-2D-MUST-BE-IGNORED', ZXing.BarcodeFormat.QR_CODE, 360, 360, new Map());
  const qr=createCanvas(1280,720), q=qr.getContext('2d');
  q.fillStyle='#fff';q.fillRect(0,0,1280,720);q.fillStyle='#000';
  for(let y=0;y<matrix.getHeight();y++) for(let x=0;x<matrix.getWidth();x++) if(matrix.get(x,y))q.fillRect(460+x,180+y,1,1);

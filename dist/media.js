@@ -1,8 +1,8 @@
-/* PocketScan image store and self-contained photo PDF writer. No network requests. */
+/* AssetScan image store and self-contained photo PDF writer. No network requests. */
 (() => {
   'use strict';
 
-  const DB_NAME = 'pocketscan-photos-v1';
+  const DB_NAME = 'assetscan-photos-v1';
   const STORE = 'photos';
   let dbPromise;
 
@@ -119,7 +119,7 @@
       pages.push(pageId);
       const pictures = [];
       let content = '0.15 0.23 0.26 rg\n';
-      content += label('POCKETSCAN  /  BARCODE PHOTO REPORT', 42, 801, 16);
+      content += label('ASSETSCAN  /  BARCODE PHOTO REPORT', 42, 801, 16);
       content += label(`Captured: ${codes.length}   |   Page ${pageIndex + 1} / ${pagesCount}`, 42, 781, 9);
       const left = 42, divider = 230, right = 553, tableTop = 758, bodyTop = 728, rowHeight = 214;
       const rowCount = Math.min(perPage, codes.length - pageIndex * perPage);
@@ -171,5 +171,5 @@
     return pdf.finish();
   }
 
-  window.PocketMedia = { capture, save, get, remove, keys, report };
+  window.AssetMedia = { capture, save, get, remove, keys, report };
 })();

@@ -1,12 +1,12 @@
-# PocketScan v13
+# AssetScan v13
 
 Phone barcode scanner that collects codes with photos and shares them as a PDF.
 
-Live: https://javaftw.github.io/PocketScan/
+Live: https://javaftw.github.io/AssetScan/
 
 Scan with your phone to open it:
 
-<img src="docs/qr-code.svg" alt="QR code for https://javaftw.github.io/PocketScan/" width="200">
+<img src="docs/qr-code.svg" alt="QR code for https://javaftw.github.io/AssetScan/" width="200">
 
 ## Application
 

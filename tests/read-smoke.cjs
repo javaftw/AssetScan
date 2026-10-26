@@ -8,7 +8,7 @@ const rule = source.slice(source.indexOf('  function confirmedRead('), source.in
 const scope = { window: {}, document: {}, recentReads: [], Date: { now: () => scope.now }, now: 0 };
 vm.createContext(scope);
 vm.runInContext(scanner, scope);
-scope.PocketScanner = scope.window.PocketScanner;
+scope.AssetScanner = scope.window.AssetScanner;
 vm.runInContext(rule, scope);
 const read = (value, format, at) => { scope.now = at; return scope.confirmedRead(value, format); };
 // Strong checksums are accepted on the first read.

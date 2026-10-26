@@ -1,7 +1,7 @@
 /* Runs ZXing off the main thread so decoding never stalls the camera preview or the buttons. */
 importScripts('./vendor/zxing.min.js', './decoder.js');
 
-const decode = self.PocketDecoder.create(self.ZXing);
+const decode = self.AssetDecoder.create(self.ZXing);
 
 self.onmessage = ({ data }) => {
   const started = Date.now();

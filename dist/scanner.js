@@ -82,8 +82,8 @@
       busy = false;
       // ZXing is only loaded onto the page when the worker cannot run it.
       const ready = window.ZXing ? Promise.resolve() : loadScript('./vendor/zxing.min.js');
-      local = ready.then(() => window.PocketDecoder || loadScript('./decoder.js'))
-        .then(() => window.PocketDecoder.create(window.ZXing));
+      local = ready.then(() => window.AssetDecoder || loadScript('./decoder.js'))
+        .then(() => window.AssetDecoder.create(window.ZXing));
       local.then(() => schedule(0), () => { stats.mode = 'unavailable'; });
     }
     try {
@@ -189,5 +189,5 @@
       return { id: d.deviceId, label: d.label, name: name || `Lens ${i + 1}` };
     });
   }
-  window.PocketScanner = { createScanner, frameGrabber, nativeDetector, focus, focusAt, zoom, torch, rearLenses, weakFormats };
+  window.AssetScanner = { createScanner, frameGrabber, nativeDetector, focus, focusAt, zoom, torch, rearLenses, weakFormats };
 })();

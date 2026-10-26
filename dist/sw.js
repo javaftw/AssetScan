@@ -1,5 +1,5 @@
 /* Optional offline app shell. The barcode batch remains in device-local storage. */
-const CACHE = 'pocketscan-static-v13';
+const CACHE = 'assetscan-static-v13';
 const SHELL = ['./', './index.html', './styles.css', './app.js', './scanner.js', './decoder.js', './decode-worker.js', './media.js', './icon.svg', './manifest.webmanifest', './vendor/zxing.min.js'];
 
 // GitHub Pages lets browsers reuse files for 10 minutes, so bypass that HTTP cache: precache fresh
@@ -11,7 +11,7 @@ self.addEventListener('install', (event) => {
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(Promise.all([
-    caches.keys().then((keys) => Promise.all(keys.filter((key) => key.startsWith('pocketscan-static-') && key !== CACHE).map((key) => caches.delete(key)))),
+    caches.keys().then((keys) => Promise.all(keys.filter((key) => key.startsWith('assetscan-static-') && key !== CACHE).map((key) => caches.delete(key)))),
     self.clients.claim()
   ]));
 });
