@@ -13,8 +13,14 @@
 </head>
 <body>
   <main class="app-shell">
-    <header><h1>AssetScan</h1><span class="version">v13</span></header>
-    <section aria-label="Camera">
+    <header><h1>AssetScan</h1><span class="version">v14</span></header>
+    <nav class="tabs" role="tablist" aria-label="Views">
+      <button id="tab-camera" class="tab" type="button" role="tab" aria-selected="true" aria-controls="panel-camera"><span aria-hidden="true">◉</span> Camera</button>
+      <button id="tab-list" class="tab" type="button" role="tab" aria-selected="false" aria-controls="panel-list" tabindex="-1"><span aria-hidden="true">☰</span> List <span id="tab-list-count" class="tab-count">0</span></button>
+    </nav>
+    <div id="scan-status" class="status" role="status" aria-live="polite">Ready.</div>
+    <div id="panels" class="panels">
+    <section id="panel-camera" class="card" role="tabpanel" aria-labelledby="tab-camera">
       <div class="camera-viewport" id="camera-viewport">
         <video id="camera-video" autoplay muted playsinline aria-label="Rear camera live view"></video>
         <span class="camera-idle">Camera off</span>
@@ -28,15 +34,15 @@
         <button id="torch-toggle" class="btn" type="button" title="Flashlight unavailable until camera starts" aria-pressed="false" disabled>Flash</button>
         <button id="sound-toggle" class="btn sound" type="button" title="Mute scan melody" aria-label="Scan sound" aria-pressed="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M11 5 6 9H3v6h3l5 4V5Z"/><path d="M15 9a5 5 0 0 1 0 6M18 6a9 9 0 0 1 0 12"/></svg></button>
       </div>
-      <div id="scan-status" class="status" role="status" aria-live="polite">Ready.</div>
     </section>
-    <section class="batch" aria-labelledby="batch-heading">
+    <section id="panel-list" class="card batch" role="tabpanel" aria-labelledby="tab-list" hidden>
       <div class="batch-heading"><h2 id="batch-heading">Scanned <span id="batch-heading-count">(0)</span></h2><button id="clear-button" class="btn text danger" type="button" disabled>Clear list</button></div>
       <div class="batch-options"><label><input id="skip-duplicates" type="checkbox" checked> Skip duplicates</label><button id="undo-button" class="btn text" type="button" disabled>Undo last</button></div>
       <p id="empty-batch" class="empty-batch">No scans yet.</p>
       <ol id="batch-list" class="batch-list" hidden></ol>
+      <div class="share-bar"><button id="share-pdf-button" type="button" class="btn primary share" disabled><strong>Share</strong><small>PDF · codes + photos</small></button></div>
     </section>
-    <div class="share-bar"><button id="share-pdf-button" type="button" class="btn primary share" disabled><strong>Share</strong><small>PDF · codes + photos</small></button></div>
+    </div>
   </main>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
   <script src="./media.js"></script>

@@ -1,4 +1,4 @@
-# AssetScan v13
+# AssetScan v14
 
 Phone barcode scanner that collects codes with photos and shares them as a PDF.
 
@@ -13,6 +13,9 @@ Scan with your phone to open it:
 Buildless HTML, CSS and JavaScript in `dist/`. No installation or build is
 needed to serve the application. Camera access needs HTTPS (or localhost).
 
+- Camera and List tabs at the top; tap or swipe sideways to switch. The camera
+  pauses while the list is shown (so nothing is captured unseen and the PDF is
+  prepared) and resumes on return.
 - Minimal camera controls, flash and sound toggle.
 - 1D barcodes: Code 128, Code 39, Code 93, ITF and Codabar for warehouse
   labels, plus EAN-13, EAN-8, UPC-A and UPC-E product codes. Only Code 128

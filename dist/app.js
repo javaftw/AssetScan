@@ -13,7 +13,9 @@
     status: $('scan-status'), torch: $('torch-toggle'), sound: $('sound-toggle'),
     duplicate: $('skip-duplicates'),
     clear: $('clear-button'), undo: $('undo-button'),
-    sharePdf: $('share-pdf-button'), toast: $('toast')
+    sharePdf: $('share-pdf-button'), toast: $('toast'),
+    tabCamera: $('tab-camera'), tabList: $('tab-list'), tabCount: $('tab-list-count'),
+    panels: $('panels'), panelCamera: $('panel-camera'), panelList: $('panel-list')
   };
 
   let codes = [];
@@ -204,6 +206,7 @@
     photoCells = new Map();
     const n = codes.length;
     ui.headingCount.textContent = `(${n})`;
+    ui.tabCount.textContent = String(n);
     ui.empty.hidden = n > 0;
     ui.list.hidden = n === 0;
     ui.list.replaceChildren();
@@ -774,7 +777,54 @@
     }
   }
 
+  // The camera stops while the list is shown, so nothing is captured unseen and the PDF can be
+  // prepared; it restarts on return if it was running.
+  let view = 'camera';
+  let resumeCamera = false;
+  function showView(next) {
+    if (next === view) return;
+    const toList = next === 'list';
+    if (toList) {
+      resumeCamera = scanning || starting;
+      if (resumeCamera) { stopCamera(); setStatus('Camera paused while the list is shown.'); }
+    }
+    view = next;
+    ui.tabCamera.setAttribute('aria-selected', String(!toList));
+    ui.tabList.setAttribute('aria-selected', String(toList));
+    ui.tabCamera.tabIndex = toList ? -1 : 0;
+    ui.tabList.tabIndex = toList ? 0 : -1;
+    // The new card slides in from the side it was swiped from.
+    (toList ? ui.panelList : ui.panelCamera).style.setProperty('--from', toList ? '40px' : '-40px');
+    ui.panelCamera.hidden = toList;
+    ui.panelList.hidden = !toList;
+    window.scrollTo(0, 0);
+    if (!toList && resumeCamera) {
+      resumeCamera = false;
+      startCamera();
+    }
+  }
+
+  // Horizontal swipes switch views; vertical movement is left to scrolling.
+  function bindSwipe() {
+    let start = null;
+    ui.panels.addEventListener('touchstart', (event) => {
+      const touch = event.touches[0];
+      start = event.touches.length === 1 && !event.target.closest('select, input') ? { x: touch.clientX, y: touch.clientY } : null;
+    }, { passive: true });
+    ui.panels.addEventListener('touchend', (event) => {
+      const touch = event.changedTouches[0];
+      if (!start || !touch) return;
+      const dx = touch.clientX - start.x, dy = touch.clientY - start.y;
+      start = null;
+      if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+      showView(dx < 0 ? 'list' : 'camera');
+    }, { passive: true });
+  }
+
   function bindEvents() {
+    ui.tabCamera.addEventListener('click', () => showView('camera'));
+    ui.tabList.addEventListener('click', () => showView('list'));
+    bindSwipe();
     ui.scanToggle.addEventListener('click', () => {
       if (scanning) { stopCamera(); setStatus('Camera stopped.'); }
       else startCamera();
